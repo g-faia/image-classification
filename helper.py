@@ -1,23 +1,25 @@
-import tensorflow as tf
-import numpy as np
-import pickle
-import matplotlib.pyplot as plt
-from six.moves import urllib
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 import os
 import sys
+import pickle
 import tarfile
+from os.path import join
+
+import tensorflow as tf
+import numpy as np
+import matplotlib.pyplot as plt
+from six.moves import urllib
+
+from tensorflow.python.platform import gfile
+from tensorflow.contrib.learn.python.learn.datasets import mnist
 
 
-def weight_variable(shape, name='weights', mean=0, stddev=0.1):
-  """Randomly generate values follow a normal distribution.
-  variable ~ N(mean, stddev)"""
-  return tf.Variable(tf.truncated_normal(
-    shape=shape, mean=mean, stddev=stddev, name=name))
-
-
-def bias_variable(shape, name='bias', constant=0.1):
-  """Generate constants which equal to constant."""
-  return tf.Variable(tf.constant(value=constant, shape=shape, name=name))
+# The path of data directory
+DATA_DIR = join(os.path.dirname(__file__), "data")
+MNIST_DIR = join(DATA_DIR, 'MNIST_data')
 
 
 def variable_summaries(var):
@@ -33,33 +35,7 @@ def variable_summaries(var):
     tf.summary.histogram('histogram', var)
 
 
-def conv2d_layer(
-  inputs, layer_name, in_channels, out_channels, 
-  filters_size, filters_mean=0, filters_stddev=1e-2, 
-  biases_constant=0.1, strides=[1, 1, 1, 1], padding='SAME', act=tf.nn.relu
-  ):
-  """Convolution Neural Network layer."""
-  with tf.name_scope(layer_name):
-    filters = weight_variable(
-      shape=[filters_size[0], filters_size[1], in_channels, out_channels], 
-      mean=filters_mean, stddev=filters_stddev, name='filters')    
-    biases = bias_variable(
-      shape=[out_channels], constant=biases_constant, name='bias')
-    preactivate = tf.nn.conv2d(
-      input=inputs, filter=filters, strides=strides, padding=padding)
-    activations = act(preactivate + biases, name='activation')
 
-  return activations
-
-
-def max_pool_layer(
-  inputs, layer_name, k_size=[1, 2, 2, 1], strides=[1, 2, 2, 1], 
-  padding='SAME'
-  ):
-  """Max pooling layer"""
-  with tf.name_scope(layer_name):
-    return tf.nn.max_pool(
-      value=inputs, ksize=k_size, strides=strides, padding=padding)
 
 
 def nn_layer(
@@ -218,27 +194,32 @@ def cifar_read_data(file_dir, n_train_files, n_test_files):
 # inception model
 ########################################################################
 
-def maybe_download_and_extract(model_dir, data_url, filename=None):
+def maybe_download(file_dir, data_url, filename=None, extract=False):
   """Download and extract model tar file."""
-  if not os.path.exists(model_dir):
-    os.makedirs(model_dir)
+  if not os.path.exists(file_dir):
+    os.makedirs(file_dir)
   if filename is None:
     filename = data_url.split('/')[-1]
 
-  file_path = os.path.join(model_dir, filename)
+  file_path = os.path.join(file_dir, filename)
   if not os.path.exists(file_path):
-    def _progress(count, block_size, total_size):
-      sys.stdout.write('\r>> Downloading %s %.1f%%' 
-        % (filename, float(count * block_size) / float(total_size) * 100.0))
-      sys.stdout.flush()
-    file_path, _ = urllib.request.urlretrieve(data_url, file_path, _progress)
-    print()
-    statinfo = os.stat(file_path)
-    print('Successfully downloaded', filename, statinfo.st_size, 'bytes.')
+    # def _progress(count, block_size, total_size):
+    #   sys.stdout.write('\r>> Downloading %s %.1f%%' 
+    #     % (filename, float(count * block_size) / float(total_size) * 100.0))
+    #   sys.stdout.flush()
+    # file_path, _ = urllib.request.urlretrieve(data_url, file_path, _progress)
+    temp_file_name, _ = urllib.request.urlretrieve(data_url)
+    gfile.Copy(temp_file_name, file_path)
+    with gfile.GFile(file_path) as f:
+      size = f.size()
+    print('Successfully downloaded', filename, size, 'bytes.')
 
-  tarfile.open(file_path, 'r:gz').extractall(model_dir)
+  if extract:
+    tarfile.open(file_path, 'r:gz').extractall(file_dir)
   # Do not delete the downloaded file.
   # os.remove(file_path)
+
+  return file_path
 
 
 def detect_dir_is_existed(dir):
@@ -247,3 +228,67 @@ def detect_dir_is_existed(dir):
     tf.gfile.DeleteRecursively(dir)
   else:
     tf.gfile.MakeDirs(dir)
+
+
+def mnist_data_loader(one_hot=False, reshape=True):
+  """Load MNIST dataset."""
+  # Download the dataset if not exist.
+  # CVDF mirror of http://yann.lecun.com/exdb/mnist/
+  DATA_URL = 'https://storage.googleapis.com/cvdf-datasets/mnist/'
+
+  TRAIN_IMAGES = 'train-images-idx3-ubyte.gz'
+  TRAIN_LABELS = 'train-labels-idx1-ubyte.gz'
+  TEST_IMAGES = 't10k-images-idx3-ubyte.gz'
+  TEST_LABELS = 't10k-labels-idx1-ubyte.gz'
+
+  file_list = [TRAIN_IMAGES, TRAIN_LABELS, TEST_IMAGES, TEST_LABELS]
+  file_list = [maybe_download(MNIST_DIR, DATA_URL + fil) for fil in file_list]
+
+  with gfile.Open(file_list[0], 'rb') as f:
+    train_data = mnist.extract_images(f) / 255
+
+  with gfile.Open(file_list[1], 'rb') as f:
+    train_labels = mnist.extract_labels(f, one_hot)
+
+  with gfile.Open(file_list[2], 'rb') as f:
+    test_data = mnist.extract_images(f) / 255
+
+  with gfile.Open(file_list[3], 'rb') as f:
+    test_labels = mnist.extract_labels(f, one_hot)
+
+  # Convert the shape of image, if reshape
+  # [n_samples, width, length, 1] ==> [n_samples, n_features]
+  if reshape:
+    assert train_data.shape[1:] == test_data.shape[1:]
+    n_train, width, length, _ = train_data.shape
+    n_test = test_data.shape[0]
+    train_data = train_data.reshape(n_train, width * length)
+    test_data = test_data.reshape(n_test, width * length)
+
+  return train_data, train_labels, test_data, test_labels
+
+
+def generate_batches(data, labels, batch_size=128):
+  """Output the next batch of the dataset."""
+  n_samples = len(data)
+
+  shuffle_indices = np.random.permutation(n_samples)
+  data, labels = data[shuffle_indices], labels[shuffle_indices]
+
+  n_batches = n_samples // batch_size + 1
+  
+  def _generate_batch():
+
+    for i in range(n_batches):
+      data_batch = data[i * batch_size: (i + 1) *  batch_size]
+      label_batch = labels[i * batch_size: (i + 1) *  batch_size]
+
+      yield data_batch, label_batch
+
+  batches = [(xt, yt) for xt, yt in _generate_batch()]
+  return batches
+
+
+if __name__ == '__main__':
+  print(mnist_data_loader())
+  pass
