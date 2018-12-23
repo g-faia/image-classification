@@ -1,6 +1,4 @@
-"""The method of logistic regression is the most basic classifer.
-  Accuracy: 92.5%
-"""
+"""Logistic regression - Accuracy: 92.5%"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -13,27 +11,26 @@ import time
 import argparse
 from tqdm import tqdm
 import tensorflow as tf
-import helper
 import numpy as np
+import helper
 
 
 class LogisticRegression(object):
 
-  def __init__(self, input_size, num_classes, init_lr, decay_steps, decay_rate, weight_decay):
+  def __init__(self, input_size, num_classes, 
+               init_lr, decay_steps, decay_rate, weight_decay):
     
-    self.weight_decay = weight_decay
     self.inputs = tf.placeholder(tf.float32, [None, input_size], name='inputs')
     self.labels = tf.placeholder(tf.int64, [None], name='labels')
+
+    self.regularizer = tf.contrib.layers.l2_regularizer(weight_decay)
     self.global_step = tf.Variable(0, trainable=False)
     self.add_global = self.global_step.assign_add(1)
     self.learning_rate = tf.train.exponential_decay(init_lr, global_step=self.global_step, 
                                                     decay_steps=decay_steps, decay_rate=decay_rate)
 
-    with tf.name_scope('inference'):
-      weights = tf.Variable(tf.truncated_normal(shape=[input_size, num_classes], 
-                            mean=0, stddev=0.1, name='W'))
-      biases = tf.Variable(tf.constant(shape=[num_classes], value=0.1, name='bias'))
-      self.logits = tf.matmul(self.inputs, weights) + biases
+    self.logits = tf.layers.dense(self.inputs, num_classes, 
+                                  kernel_regularizer=self.regularizer)
 
     self.loss_acc(), self.train_op()
 
@@ -41,8 +38,7 @@ class LogisticRegression(object):
     """The loss and accuracy of model."""
     with tf.name_scope("loss"):
       losses = tf.losses.sparse_softmax_cross_entropy(labels=self.labels, logits=self.logits)
-      self.loss = tf.add(tf.reduce_mean(losses), self.weight_decay * tf.add_n([tf.nn.l2_loss(v) 
-                         for v in tf.trainable_variables() if 'bias' not in v.name]))
+      self.loss = tf.reduce_mean(losses) + tf.losses.get_regularization_loss()
 
     with tf.name_scope("accuracy"):
       correct_prediction = tf.equal(tf.argmax(self.logits, 1), self.labels)
@@ -55,7 +51,7 @@ class LogisticRegression(object):
 
 def main(unused_argv):
   
-  train_data, train_labels, test_data, test_labels = helper.mnist_data_loader()  
+  train_data, train_labels, test_data, test_labels = helper.mnist_data_loader()
 
   model = LogisticRegression(
     input_size=FLAGS.input_size, num_classes=FLAGS.num_classes, 
@@ -70,18 +66,13 @@ def main(unused_argv):
     print("----- Epoch {}/{} -----".format(e + 1, FLAGS.epochs))
     # training stage. 
     train_batches = helper.generate_batches(train_data, train_labels, FLAGS.batch_size)
-    for xt, yt in tqdm(train_batches, desc="Training"):
+    for xt, yt in tqdm(train_batches, desc="Training", ascii=True):
       _, i = sess.run([model.optimization, model.add_global], 
                       feed_dict={ model.inputs: xt, model.labels: yt})
+    
     # testing stage.
-    test_batches = helper.generate_batches(test_data, test_labels, FLAGS.batch_size)
-    acc_list, loss_list = [], []
-    for xd, yd in tqdm(test_batches, desc="Testing"):
-      acc, loss, lr = sess.run([model.accuracy, model.loss, model.learning_rate], 
-                               feed_dict={ model.inputs: xd, model.labels: yd})
-      acc_list.append(acc)
-      loss_list.append(loss)
-    acc, loss = np.mean(acc_list), np.mean(loss_list)
+    acc, loss, lr = sess.run([model.accuracy, model.loss, model.learning_rate], 
+                             feed_dict={model.inputs: test_data, model.labels: test_labels})
 
     current = time.asctime(time.localtime(time.time()))
     print("""{0} Step {1:5} Learning rate: {2:.6f} Losss: {3:.4f} Accuracy: {4:.4f}"""
@@ -95,7 +86,7 @@ def main(unused_argv):
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
-  parser.add_argument('--epochs', type=int, default=5,
+  parser.add_argument('--epochs', type=int, default=10,
                       help='Number of epochs to run trainer.')
   parser.add_argument('--learning_rate', type=float, default=0.001, 
                       help='Initial learning rate.')

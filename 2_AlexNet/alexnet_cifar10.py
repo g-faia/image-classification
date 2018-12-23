@@ -1,33 +1,40 @@
-"""Multilayer perceptron - Accuracy: 98.2%"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
 import sys
+
 sys.path.append('..')
 
 import os
 import time
 import argparse
-from tqdm import tqdm
 import tensorflow as tf
+from tqdm import tqdm
 import numpy as np
 import helper
 
 
-class MLP(object):
+class AlexNet(object):
 
-  def __init__(self, input_size, num_classes, 
-               dropout, init_lr, decay_steps, decay_rate, weight_decay):
-    
-    self.input_size = input_size
+  def __init__(self, image_size, img_depth, cropped_size, num_classes, 
+               dropout, init_lr, weight_decay, decay_steps, decay_rate):
+
     self.num_classes = num_classes
     self.dropout = dropout
+    
+    self.inputs = tf.placeholder(tf.float32, [None, image_size, image_size, img_depth])
 
-    self.inputs = tf.placeholder(tf.float32, [None, self.input_size], name='inputs')
+    self.mode = tf.placeholder(dtype=tf.bool, shape=(), name='mode')
+
+    with tf.device('/cpu:0'):
+      # use the distorted images as the input of model.
+      self.distorted_images = helper.pre_process_images(images=self.inputs, 
+                                                        phase=self.mode,
+                                                        img_size_cropped=cropped_size)
+
     self.labels = tf.placeholder(tf.int64, [None], name='labels')
     
-    self.mode = tf.placeholder(dtype=tf.bool, shape=(), name='mode')
     self.regularizer = tf.contrib.layers.l2_regularizer(weight_decay)
     self.global_step = tf.Variable(0, trainable=False)
     self.add_global = self.global_step.assign_add(1)
@@ -37,25 +44,26 @@ class MLP(object):
     self.model(), self.loss_acc(), self.train_op()
 
   def model(self):
-    """multiple fully connected."""
-    fc1 = tf.layers.dense(self.inputs, 392, 
+    """conv5x5 -> pool2x2 -> conv5x5 -> pool2x2 -> multiple fc."""
+    conv1 = tf.layers.conv2d(self.inputs, 32, (5, 5), 
+                             activation=tf.nn.relu, 
+                             kernel_regularizer=self.regularizer)
+    pool1 = tf.layers.max_pooling2d(conv1, 2, 2)
+
+    conv2 = tf.layers.conv2d(pool1, 64, (5, 5), 
+                             activation=tf.nn.relu,
+                             kernel_regularizer=self.regularizer)
+    pool2 = tf.layers.max_pooling2d(conv2, 2, 2)
+
+    flatten = tf.layers.flatten(pool2)
+
+    fc1 = tf.layers.dense(flatten, 100, 
                           activation=tf.nn.relu, 
                           kernel_regularizer=self.regularizer)
     fc1 = tf.layers.dropout(fc1, rate=self.dropout, training=self.mode)
-    
-    fc2 = tf.layers.dense(fc1, 196, 
-                          activation=tf.nn.relu, 
-                          kernel_regularizer=self.regularizer)
-    fc2 = tf.layers.dropout(fc2, rate=self.dropout, training=self.mode)
-    
-    fc3 = tf.layers.dense(fc2, 98, 
-                          activation=tf.nn.relu, 
-                          kernel_regularizer=self.regularizer)
-    fc3 = tf.layers.dropout(fc3, rate=self.dropout, training=self.mode)
 
-    self.logits = tf.layers.dense(fc3, self.num_classes, 
-                                  kernel_regularizer=self.regularizer)
-
+    self.logits = tf.layers.dense(fc1, self.num_classes, kernel_regularizer=self.regularizer)
+    
   def loss_acc(self):
     """The loss and accuracy of model."""
     with tf.name_scope("loss"):
@@ -68,16 +76,19 @@ class MLP(object):
 
   def train_op(self):
     """The train operation."""
-    self.optimization = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss)
+    with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+      self.optimization = tf.train.AdamOptimizer(self.learning_rate).minimize(self.loss)
 
 
 def main(unused_argv):
-  
-  train_data, train_labels, test_data, test_labels = helper.mnist_data_loader()  
 
-  model = MLP(
-    input_size=FLAGS.input_size,  num_classes=FLAGS.num_classes,
-    dropout = FLAGS.dropout, init_lr=FLAGS.learning_rate, 
+  # Load cifar-10 dataset.
+  train_data, train_labels, test_data, test_labels = helper.cifar_data_loader()
+
+  model = AlexNet(
+    num_classes=FLAGS.num_classes, image_size=FLAGS.image_size, 
+    img_depth=FLAGS.img_depth, cropped_size=FLAGS.cropped_size, 
+    dropout=FLAGS.dropout, init_lr=FLAGS.learning_rate, 
     decay_steps=FLAGS.decay_steps, decay_rate=FLAGS.decay_rate, weight_decay=FLAGS.weight_decay
     )
 
@@ -106,10 +117,10 @@ def main(unused_argv):
   print("Model saved in file: %s" % model_path)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument('--epochs', type=int, default=10,
-                      help='Number of epochs to run trainer.')
+                      help='Number of epochs to run trainer.')  
   parser.add_argument('--learning_rate', type=float, default=0.001, 
                       help='Initial learning rate.')
   parser.add_argument('--decay_steps', type=int, default=5000, 
@@ -120,13 +131,17 @@ if __name__ == '__main__':
                       help='The rate of weight decay.')
   parser.add_argument('--batch_size', type=int, default=128, 
                       help='The size of batch.')
-  parser.add_argument('--input_size', type=int, default=784,
-                      help='The size of input.')
   parser.add_argument('--num_classes', type=int, default=10,
                       help='The number of classes.')
+  parser.add_argument('--image_size', type=str, default=32,
+                      help='The size of image.')
+  parser.add_argument('--img_depth', type=int, default=3, 
+                      help="The image depth.")
+  parser.add_argument('--cropped_size', type=str, default=28, 
+                      help="The size of cropped image.")
   parser.add_argument('--dropout', type=float, default=0.5, 
                       help='Keep probability for training dropout.')
   parser.add_argument('--save_path', type=str,  
-                      default='models/mnist_multi.ckpt')
+                      default='models/alexnet_cifar.ckpt')
   FLAGS, unparsed = parser.parse_known_args()
   tf.app.run()
