@@ -1,3 +1,6 @@
+"""
+Alexnet-v1 - 78.35%
+"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -31,12 +34,16 @@ class AlexNet(object):
       # use the distorted images as the input of model.
       self.distorted_images = helper.pre_process_images(images=self.inputs, 
                                                         phase=self.mode,
-                                                        img_size_cropped=cropped_size)
+                                                        img_cropped=cropped_size)
 
     self.labels = tf.placeholder(tf.int64, [None], name='labels')
     
     self.regularizer = tf.contrib.layers.l2_regularizer(weight_decay)
+
     self.global_step = tf.Variable(0, trainable=False)
+    # boundaries = [5000, 20000, 60000]
+    # values = [init_lr / (10 ** i) for i in range(len(boundaries) + 1)]
+    # self.learning_rate = tf.train.piecewise_constant(self.global_step, boundaries, values)
     self.add_global = self.global_step.assign_add(1)
     self.learning_rate = tf.train.exponential_decay(init_lr, global_step=self.global_step, 
                                                     decay_steps=decay_steps, decay_rate=decay_rate)
@@ -44,25 +51,33 @@ class AlexNet(object):
     self.model(), self.loss_acc(), self.train_op()
 
   def model(self):
-    """conv5x5 -> pool2x2 -> conv5x5 -> pool2x2 -> multiple fc."""
-    conv1 = tf.layers.conv2d(self.inputs, 32, (5, 5), 
+    """conv3x3 -> pool2x2 -> conv3x3 -> pool2x2 -> conv3x3 -> pool2x2 -> multiple fc."""
+
+    # conv1 = tf.layers.conv2d(self.inputs, 64, (3, 3), 
+    conv1 = tf.layers.conv2d(self.distorted_images, 64, (3, 3),
                              activation=tf.nn.relu, 
                              kernel_regularizer=self.regularizer)
     pool1 = tf.layers.max_pooling2d(conv1, 2, 2)
 
-    conv2 = tf.layers.conv2d(pool1, 64, (5, 5), 
-                             activation=tf.nn.relu,
+    conv2 = tf.layers.conv2d(pool1, 128, (3, 3), 
+                             activation=tf.nn.relu, 
                              kernel_regularizer=self.regularizer)
     pool2 = tf.layers.max_pooling2d(conv2, 2, 2)
 
-    flatten = tf.layers.flatten(pool2)
+    conv3 = tf.layers.conv2d(pool2, 256, (3, 3), 
+                             activation=tf.nn.relu,
+                             kernel_regularizer=self.regularizer)
+    pool3 = tf.layers.max_pooling2d(conv3, 2, 2)
 
-    fc1 = tf.layers.dense(flatten, 100, 
+    flatten = tf.layers.flatten(pool3)
+
+    fc1 = tf.layers.dense(flatten, 1024, 
                           activation=tf.nn.relu, 
                           kernel_regularizer=self.regularizer)
     fc1 = tf.layers.dropout(fc1, rate=self.dropout, training=self.mode)
 
-    self.logits = tf.layers.dense(fc1, self.num_classes, kernel_regularizer=self.regularizer)
+    self.logits = tf.layers.dense(fc1, self.num_classes,
+                                  kernel_regularizer=self.regularizer)
     
   def loss_acc(self):
     """The loss and accuracy of model."""
@@ -102,10 +117,16 @@ def main(unused_argv):
     for xt, yt in tqdm(train_batches, desc="Training", ascii=True):
       _, i = sess.run([model.optimization, model.add_global], 
                       feed_dict={ model.inputs: xt, model.labels: yt, model.mode: True})
-    # testing stage.
-    acc, loss, lr = sess.run([model.accuracy, model.loss, model.learning_rate], 
-                             feed_dict={ model.inputs: test_data, model.labels: test_labels, 
-                                         model.mode: False})
+    
+    # testing stage, use mini-batch mode to inference all test data.
+    test_batches = helper.generate_batches(test_data, test_labels, 128)
+    acc, loss = [], []
+    for xt, yt in test_batches:
+      _acc, _loss, lr = sess.run([model.accuracy, model.loss, model.learning_rate], 
+                                 feed_dict={ model.inputs: xt, model.labels: yt, 
+                                             model.mode: False})
+      acc.append(_acc), loss.append(_loss)
+    acc, loss = np.mean(acc), np.mean(loss)
 
     current = time.asctime(time.localtime(time.time()))
     print("""{0} Step {1:5} Learning rate: {2:.6f} Losss: {3:.4f} Accuracy: {4:.4f}"""
@@ -119,13 +140,13 @@ def main(unused_argv):
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
-  parser.add_argument('--epochs', type=int, default=10,
+  parser.add_argument('--epochs', type=int, default=500,
                       help='Number of epochs to run trainer.')  
   parser.add_argument('--learning_rate', type=float, default=0.001, 
                       help='Initial learning rate.')
   parser.add_argument('--decay_steps', type=int, default=5000, 
                       help='The period of decay.')
-  parser.add_argument('--decay_rate', type=float, default=0.65, 
+  parser.add_argument('--decay_rate', type=float, default=0.9, 
                       help='The rate of decay.')
   parser.add_argument('--weight_decay', type=float, default=2e-6,
                       help='The rate of weight decay.')
@@ -137,7 +158,7 @@ if __name__ == "__main__":
                       help='The size of image.')
   parser.add_argument('--img_depth', type=int, default=3, 
                       help="The image depth.")
-  parser.add_argument('--cropped_size', type=str, default=28, 
+  parser.add_argument('--cropped_size', type=str, default=32, 
                       help="The size of cropped image.")
   parser.add_argument('--dropout', type=float, default=0.5, 
                       help='Keep probability for training dropout.')
