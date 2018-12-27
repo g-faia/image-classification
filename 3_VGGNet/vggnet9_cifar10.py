@@ -1,5 +1,5 @@
 """
-Alexnet-v2 - 89.2%
+VGGNet - 89.2%
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -18,7 +18,7 @@ import numpy as np
 import helper
 
 
-class AlexNet(object):
+class VGGNet(object):
 
   def __init__(self, image_size, img_depth, cropped_size, num_classes, 
                dropout, init_lr, weight_decay, decay_steps, decay_rate):
@@ -41,61 +41,39 @@ class AlexNet(object):
     self.regularizer = tf.contrib.layers.l2_regularizer(weight_decay)
 
     self.global_step = tf.Variable(0, trainable=False)
-    # boundaries = [5000, 20000, 60000]
-    # values = [init_lr / (10 ** i) for i in range(len(boundaries) + 1)]
-    # self.learning_rate = tf.train.piecewise_constant(self.global_step, boundaries, values)
+    boundaries = [10000, 20000, 30000, 40000]
+    values = [init_lr / (10 ** i) for i in range(len(boundaries) + 1)]
+    self.learning_rate = tf.train.piecewise_constant(self.global_step, boundaries, values)
     self.add_global = self.global_step.assign_add(1)
-    self.learning_rate = tf.train.exponential_decay(init_lr, global_step=self.global_step, 
-                                                    decay_steps=decay_steps, decay_rate=decay_rate)
+    # self.learning_rate = tf.train.exponential_decay(init_lr, global_step=self.global_step, 
+                                                    # decay_steps=decay_steps, decay_rate=decay_rate)
 
     self.model(), self.loss_acc(), self.train_op()
 
   def model(self):
-    """(conv3x3 -> conv3x3 -> pool2x2) x3 -> multiple fc."""
-    inputs = tf.layers.batch_normalization(self.inputs, training=self.mode)
-    # conv1 = tf.layers.conv2d(inputs, 64, (3, 3), 
-    conv1 = tf.layers.conv2d(self.distorted_images, 64, (3, 3),
-                             activation=tf.nn.relu,
-                             padding='SAME',
-                             kernel_regularizer=self.regularizer)
+    """(conv3x3 -> conv3x3 -> pool2x2) blocks -> multiple fc."""
+    def model_block(inputs, n_filters):
+      conv = tf.layers.batch_normalization(inputs, training=self.mode)
+      conv = tf.layers.conv2d(conv, n_filters, (3, 3), 
+                              activation=tf.nn.relu,
+                              padding='SAME',
+                              kernel_regularizer=self.regularizer)
 
-    conv2 = tf.layers.batch_normalization(conv1, training=self.mode)
-    conv2 = tf.layers.conv2d(conv2, 64, (3, 3),
-                             activation=tf.nn.relu,
-                             padding='SAME',
-                             kernel_regularizer=self.regularizer)
+      conv = tf.layers.batch_normalization(conv, training=self.mode)
+      conv = tf.layers.conv2d(conv, n_filters, (3, 3),
+                              activation=tf.nn.relu,
+                              padding='SAME',
+                              kernel_regularizer=self.regularizer)
 
-    pool1 = tf.layers.max_pooling2d(conv2, 2, 2)
-    
-    conv3 = tf.layers.batch_normalization(pool1, training=self.mode)
-    conv3 = tf.layers.conv2d(conv3, 128, (3, 3), 
-                             activation=tf.nn.relu,
-                             padding='SAME',
-                             kernel_regularizer=self.regularizer)
-    
-    conv4 = tf.layers.batch_normalization(conv3, training=self.mode)
-    conv4 = tf.layers.conv2d(conv4, 128, (3, 3), 
-                             activation=tf.nn.relu,
-                             padding='SAME',
-                             kernel_regularizer=self.regularizer)
-    
-    pool2 = tf.layers.max_pooling2d(conv4, 2, 2)
+      pool = tf.layers.max_pooling2d(conv, 2, 2)
 
-    conv5 = tf.layers.batch_normalization(pool2, training=self.mode)
-    conv5 = tf.layers.conv2d(conv5, 128, (3, 3),
-                             activation=tf.nn.relu,
-                             padding='SAME',      
-                             kernel_regularizer=self.regularizer)
+      return pool
 
-    conv6 = tf.layers.batch_normalization(conv5, training=self.mode)
-    conv6 = tf.layers.conv2d(conv6, 128, (3, 3),
-                             activation=tf.nn.relu,
-                             padding='SAME',      
-                             kernel_regularizer=self.regularizer)
-    
-    pool3 = tf.layers.max_pooling2d(conv6, 2, 2)
+    block1 = model_block(self.distorted_images, n_filters=64)
+    block2 = model_block(block1, n_filters=128)
+    block3 = model_block(block2, n_filters=128)
 
-    flatten = tf.layers.flatten(pool3)
+    flatten = tf.layers.flatten(block3)
 
     fc1 = tf.layers.batch_normalization(flatten, training=self.mode)
     fc1 = tf.layers.dense(fc1, 1024,
@@ -110,7 +88,7 @@ class AlexNet(object):
     """The loss and accuracy of model."""
     with tf.name_scope("loss"):
       losses = tf.losses.sparse_softmax_cross_entropy(labels=self.labels, logits=self.logits)
-      self.loss =tf.reduce_mean(losses) + tf.losses.get_regularization_loss()
+      self.loss = tf.reduce_mean(losses) + tf.losses.get_regularization_loss()
 
     with tf.name_scope("accuracy"):
       correct_prediction = tf.equal(tf.argmax(self.logits, 1), self.labels)
@@ -127,7 +105,7 @@ def main(unused_argv):
   # Load cifar-10 dataset.
   train_data, train_labels, test_data, test_labels = helper.cifar_data_loader()
 
-  model = AlexNet(
+  model = VGGNet(
     num_classes=FLAGS.num_classes, image_size=FLAGS.image_size, 
     img_depth=FLAGS.img_depth, cropped_size=FLAGS.cropped_size, 
     dropout=FLAGS.dropout, init_lr=FLAGS.learning_rate, 
@@ -173,7 +151,7 @@ if __name__ == "__main__":
                       help='Initial learning rate.')
   parser.add_argument('--decay_steps', type=int, default=5000, 
                       help='The period of decay.')
-  parser.add_argument('--decay_rate', type=float, default=0.9, 
+  parser.add_argument('--decay_rate', type=float, default=0.65, 
                       help='The rate of decay.')
   parser.add_argument('--weight_decay', type=float, default=2e-6,
                       help='The rate of weight decay.')

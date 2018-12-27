@@ -43,8 +43,8 @@ def _train_pre_process_image(image, img_cropped):
   # intended. A simple solution is to limit the range.
 
   # Limit the image pixels between [0, 1] in case of overflow.
-  image = tf.minimum(image, 1.0)
-  image = tf.maximum(image, 0.0)
+  # image = tf.minimum(image, 1.0)
+  # image = tf.maximum(image, 0.0)
   
   return image
 
@@ -224,10 +224,14 @@ def cifar_data_reshape(data):
   Return, size of tensor (n_samples, 32, 32, 3)
   """
   n_dims = len(data.shape)
+
   if n_dims == 1:
     return data.reshape(3, 32, 32).transpose([0, 2, 3, 1]) / 255
   else:
     n_samples = data.shape[0]
+    # data = data.reshape(n_samples, 3, 32, 32) / 255
+    # data -= np.mean(data, axis=0)
+    # return data.transpose([0, 2, 3, 1])
     return data.reshape(n_samples, 3, 32, 32).transpose([0, 2, 3, 1]) / 255 
 
 
@@ -252,5 +256,8 @@ def cifar_data_loader(n_train_files=5, n_test_files=1):
   test_data = cifar_data_reshape(test_batch[b'data'])
   # Note: Convert `test_labels` type to np.ndarray
   test_labels = np.array(test_batch[b'labels'])
+
+  # train_data -= np.mean(train_data, axis=0)
+  # test_data -= np.mean(test_data, axis=0)
 
   return train_data, train_labels, test_data, test_labels

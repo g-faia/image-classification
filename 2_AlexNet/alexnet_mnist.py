@@ -66,7 +66,7 @@ class ALexNet(object):
     """The loss and accuracy of model."""
     with tf.name_scope("loss"):
       losses = tf.losses.sparse_softmax_cross_entropy(labels=self.labels, logits=self.logits)
-      self.loss =tf.reduce_mean(losses) + tf.losses.get_regularization_loss()
+      self.loss = tf.reduce_mean(losses) + tf.losses.get_regularization_loss()
 
     with tf.name_scope("accuracy"):
       correct_prediction = tf.equal(tf.argmax(self.logits, 1), self.labels)
