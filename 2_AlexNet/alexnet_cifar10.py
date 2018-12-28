@@ -47,8 +47,6 @@ class AlexNet(object):
 
   def model(self):
     """conv3x3 -> pool2x2 -> conv3x3 -> pool2x2 -> conv3x3 -> pool2x2 -> multiple fc."""
-
-    # conv1 = tf.layers.conv2d(self.inputs, 64, (3, 3), 
     conv1 = tf.layers.conv2d(self.distorted_images, 64, (3, 3),
                              activation=tf.nn.relu, 
                              kernel_regularizer=self.regularizer)

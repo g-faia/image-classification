@@ -25,7 +25,6 @@ def fixed_padding(inputs, kernel_size):
   """
   Pads the input along the spatial dimensions independently of input size.
   """
-
   pad_total = kernel_size - 1
   pad_beg = pad_total // 2
   pad_end = pad_total - pad_beg
@@ -44,9 +43,7 @@ def conv2d_fixed_padding(inputs, filters, kernel_size, strides):
 
 
 def building_block(inputs, filters, projection_shortcut, strides, is_training):
-  """
-  Standard building block for residual networks with BN before convolutions.
-  """
+  """Standard building block for residual networks with BN before convolutions."""
   shortcut = inputs
   inputs = batch_norm_relu(inputs, is_training)
   
@@ -101,7 +98,7 @@ def block_layer(inputs, filters, block_fn, blocks, strides, is_training, name):
 
 class Resnet(object):
 
-  def __init__(self, image_size, img_depth, padded_size, cropped_size, num_classes, 
+  def __init__(self, image_size, img_depth, num_classes, 
                dropout, weight_decay, init_lr, decay_steps, decay_rate):
 
     self.num_classes = num_classes
@@ -111,17 +108,10 @@ class Resnet(object):
     self.num_blocks = (image_size - 2) // 6
     self.inputs = tf.placeholder(tf.float32, [None, image_size, image_size, img_depth], name='inputs')
     
-    # pad the original image to padded_size * padded_size
-    pad_left = pad_up = (padded_size - image_size) // 2
-    pad_right = pad_down = padded_size - image_size - pad_left
-    
-    if padded_size > image_size:
-      self.inputs = tf.pad(self.inputs, [[0, 0], [pad_left, pad_right], [pad_up, pad_down], [0, 0]])
-
     self.phase = tf.placeholder(dtype=tf.bool, shape=(), name='phase')
 
     with tf.device('/cpu:0'):
-      self.distorted_images = helper.pre_process_images(images=self.inputs, phase=self.phase, img_cropped=cropped_size)
+      self.distorted_images = helper.pre_process_images(images=self.inputs, phase=self.phase, image_size=image_size)
     
     # use the distorted images as the input of model.
     self.labels = tf.placeholder(tf.int64, [None], name='labels')
@@ -129,7 +119,7 @@ class Resnet(object):
     self.regularizer = tf.contrib.layers.l2_regularizer(weight_decay)
 
     self.global_step = tf.Variable(0, trainable=False)
-    boundaries = [10000, 20000, 30000, 40000]
+    boundaries = [10000, 20000, 30000]
     values = [init_lr / (10 ** i) for i in range(len(boundaries) + 1)]
     self.learning_rate = tf.train.piecewise_constant(self.global_step, boundaries, values)
     self.add_global = self.global_step.assign_add(1)
@@ -184,7 +174,6 @@ def main(unused_argv):
 
   model = Resnet(
     image_size=FLAGS.image_size, img_depth=FLAGS.img_depth, 
-    padded_size=FLAGS.padded_size, cropped_size=FLAGS.cropped_size, 
     num_classes=FLAGS.num_classes, dropout=FLAGS.dropout,
     weight_decay=FLAGS.weight_decay, init_lr=FLAGS.learning_rate, 
     decay_steps=FLAGS.decay_steps, decay_rate=FLAGS.decay_rate
@@ -243,10 +232,6 @@ if __name__ == "__main__":
                       help='The size of image.')
   parser.add_argument('--img_depth', type=int, default=3, 
                       help="The image depth.")
-  parser.add_argument('--padded_size', type=int, default=32, 
-                      help="The size of padded image.")
-  parser.add_argument('--cropped_size', type=str, default=32, 
-                      help="The size of cropped image.")
   parser.add_argument('--save_path', type=str,  
                       default='models/cifar_resnet.ckpt')
   FLAGS, unparsed = parser.parse_known_args()

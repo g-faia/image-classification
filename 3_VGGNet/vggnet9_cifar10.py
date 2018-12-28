@@ -41,7 +41,7 @@ class VGGNet(object):
     self.regularizer = tf.contrib.layers.l2_regularizer(weight_decay)
 
     self.global_step = tf.Variable(0, trainable=False)
-    boundaries = [20000, 40000, 60000]
+    boundaries = [10000, 20000, 30000]
     values = [init_lr / (10 ** i) for i in range(len(boundaries) + 1)]
     self.learning_rate = tf.train.piecewise_constant(self.global_step, boundaries, values)
     self.add_global = self.global_step.assign_add(1)
