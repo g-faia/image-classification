@@ -22,11 +22,13 @@ MNIST_DIR = join(DATA_DIR, 'MNIST_data')
 CIFAR10_DIR = join(DATA_DIR, 'cifar-10-batches-py')
 
 
-def _train_pre_process_image(image, img_cropped):
+def _train_pre_process_image(image, image_size):
   """Pre-process the image in train phase."""
 
+  image = tf.image.resize_image_with_crop_or_pad(image, image_size+4, image_size+4)
+
   # Randomly crop the input image.
-  image = tf.random_crop(image, size=[img_cropped, img_cropped, 3])
+  image = tf.random_crop(image, size=[image_size, image_size, 3])
 
   # Randomly flip the image horizontally.
   image = tf.image.random_flip_left_right(image)
@@ -37,6 +39,7 @@ def _train_pre_process_image(image, img_cropped):
   image = tf.image.random_brightness(image, max_delta=0.2)
   image = tf.image.random_saturation(image, lower=0.0, upper=2.0)
 
+  image = tf.image.per_image_standardization(image)
   # Some of these functions may overflow and result in pixel
   # values beyond the [0, 1] range. It is unclear from the
   # documentation of TensorFlow 0.10.0rc0 whether this is
@@ -49,24 +52,25 @@ def _train_pre_process_image(image, img_cropped):
   return image
 
 
-def _test_pre_process_image(image, img_cropped):
+def _test_pre_process_image(image, image_size):
   """Return the original image."""
-  return tf.image.resize_image_with_crop_or_pad(image, 
-                                                target_height=img_cropped, 
-                                                target_width=img_cropped)
+  image = tf.image.resize_image_with_crop_or_pad(image, image_size, image_size)
+  image = tf.image.per_image_standardization(image)
+  
+  return image    
 
 
-def _pre_process_image(image, phase, img_cropped):
+def _pre_process_image(image, phase, image_size):
   """Pre-process the image according to `phase`."""
   return tf.cond(phase, 
-                 lambda: _train_pre_process_image(image, img_cropped), 
-                 lambda: _test_pre_process_image(image, img_cropped))
+                 lambda: _train_pre_process_image(image, image_size), 
+                 lambda: _test_pre_process_image(image, image_size))
 
 
-def pre_process_images(images, phase, img_cropped):
+def pre_process_images(images, phase, image_size):
   """Pre-process the images according to `phase`."""
   with tf.name_scope('pre_process'):
-    return tf.map_fn(lambda image: _pre_process_image(image, phase, img_cropped), images)
+    return tf.map_fn(lambda image: _pre_process_image(image, phase, image_size), images)
 
 
 def variable_summaries(var):

@@ -1,5 +1,5 @@
 """
-VGGNet - 89.2%
+VGGNet - 90.5%
 """
 from __future__ import absolute_import
 from __future__ import division
@@ -20,7 +20,7 @@ import helper
 
 class VGGNet(object):
 
-  def __init__(self, image_size, img_depth, cropped_size, num_classes, 
+  def __init__(self, image_size, img_depth, num_classes, 
                dropout, init_lr, weight_decay, decay_steps, decay_rate):
 
     self.num_classes = num_classes
@@ -34,14 +34,14 @@ class VGGNet(object):
       # use the distorted images as the input of model.
       self.distorted_images = helper.pre_process_images(images=self.inputs, 
                                                         phase=self.mode,
-                                                        img_cropped=cropped_size)
+                                                        image_size=image_size)
 
     self.labels = tf.placeholder(tf.int64, [None], name='labels')
     
     self.regularizer = tf.contrib.layers.l2_regularizer(weight_decay)
 
     self.global_step = tf.Variable(0, trainable=False)
-    boundaries = [10000, 20000, 30000, 40000]
+    boundaries = [20000, 40000, 60000]
     values = [init_lr / (10 ** i) for i in range(len(boundaries) + 1)]
     self.learning_rate = tf.train.piecewise_constant(self.global_step, boundaries, values)
     self.add_global = self.global_step.assign_add(1)
@@ -106,8 +106,7 @@ def main(unused_argv):
   train_data, train_labels, test_data, test_labels = helper.cifar_data_loader()
 
   model = VGGNet(
-    num_classes=FLAGS.num_classes, image_size=FLAGS.image_size, 
-    img_depth=FLAGS.img_depth, cropped_size=FLAGS.cropped_size, 
+    num_classes=FLAGS.num_classes, image_size=FLAGS.image_size, img_depth=FLAGS.img_depth, 
     dropout=FLAGS.dropout, init_lr=FLAGS.learning_rate, 
     decay_steps=FLAGS.decay_steps, decay_rate=FLAGS.decay_rate, weight_decay=FLAGS.weight_decay
     )
@@ -163,8 +162,6 @@ if __name__ == "__main__":
                       help='The size of image.')
   parser.add_argument('--img_depth', type=int, default=3, 
                       help="The image depth.")
-  parser.add_argument('--cropped_size', type=str, default=32, 
-                      help="The size of cropped image.")
   parser.add_argument('--dropout', type=float, default=0.5, 
                       help='Keep probability for training dropout.')
   parser.add_argument('--save_path', type=str,  
