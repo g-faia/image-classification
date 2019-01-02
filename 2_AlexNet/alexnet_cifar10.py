@@ -43,7 +43,7 @@ class AlexNet(object):
     self.learning_rate = tf.train.exponential_decay(init_lr, global_step=self.global_step, 
                                                     decay_steps=decay_steps, decay_rate=decay_rate)
 
-    self.model(), self.loss_acc(), self.train_op()
+    self.model(), self.loss(), self.train_op()
 
   def model(self):
     """conv3x3 -> pool2x2 -> conv3x3 -> pool2x2 -> conv3x3 -> pool2x2 -> multiple fc."""
@@ -72,15 +72,11 @@ class AlexNet(object):
     self.logits = tf.layers.dense(fc1, self.num_classes,
                                   kernel_regularizer=self.regularizer)
     
-  def loss_acc(self):
+  def loss(self):
     """The loss and accuracy of model."""
     with tf.name_scope("loss"):
       losses = tf.losses.sparse_softmax_cross_entropy(labels=self.labels, logits=self.logits)
       self.loss = tf.reduce_mean(losses) + tf.losses.get_regularization_loss()
-
-    with tf.name_scope("accuracy"):
-      correct_prediction = tf.equal(tf.argmax(self.logits, 1), self.labels)
-      self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
 
   def train_op(self):
     """The train operation."""
@@ -111,14 +107,21 @@ def main(unused_argv):
                       feed_dict={ model.inputs: xt, model.labels: yt, model.mode: True})
     
     # testing stage, use mini-batch mode to inference all test data.
-    test_batches = helper.generate_batches(test_data, test_labels, 128)
-    acc, loss = [], []
+    test_batches = helper.generate_batches(test_data, test_labels, FLAGS.batch_size)
+    total_pred = correct_pred = 0
+    total_loss = []
     for xt, yt in test_batches:
-      _acc, _loss, lr = sess.run([model.accuracy, model.loss, model.learning_rate], 
-                                 feed_dict={ model.inputs: xt, model.labels: yt, 
-                                             model.mode: False})
-      acc.append(_acc), loss.append(_loss)
-    acc, loss = np.mean(acc), np.mean(loss)
+      logits, loss, lr = sess.run([model.logits, model.loss, model.learning_rate], 
+                                  feed_dict={ model.inputs: xt, model.labels: yt, 
+                                              model.mode: False})
+
+      pred = np.argmax(logits, axis=1)
+      correct_pred += np.sum(yt == pred)
+      total_pred += yt.shape[0]
+      total_loss.append(loss)
+
+    acc = correct_pred / total_pred
+    loss = np.mean(total_loss)
 
     current = time.asctime(time.localtime(time.time()))
     print("""{0} Step {1:5} Learning rate: {2:.6f} Losss: {3:.4f} Accuracy: {4:.4f}"""
@@ -140,7 +143,7 @@ if __name__ == "__main__":
                       help='The period of decay.')
   parser.add_argument('--decay_rate', type=float, default=0.9, 
                       help='The rate of decay.')
-  parser.add_argument('--weight_decay', type=float, default=2e-6,
+  parser.add_argument('--weight_decay', type=float, default=2e-4,
                       help='The rate of weight decay.')
   parser.add_argument('--batch_size', type=int, default=128, 
                       help='The size of batch.')
