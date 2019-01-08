@@ -1,9 +1,9 @@
+"""resnet 92.0%"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
 
 import sys
-
 sys.path.append('..')
 
 import os
@@ -58,21 +58,18 @@ class Resnet(object):
                               kernel_initializer=initializer)
       return conv
 
-    def _res_subblock(inputs, n_filters, strides, activate_before_res=False):
-      if activate_before_res:
-        inputs = tf.layers.batch_normalization(inputs, training=self.mode)
-        inputs = tf.nn.relu(inputs)
-        shortcut = inputs
-      else:
-        shortcut = inputs
-        inputs = tf.layers.batch_normalization(inputs, training=self.mode)
-        inputs = tf.nn.relu(inputs)
+    def _relu(inputs, leakinsess=0.1):
+      return tf.where(tf.less(inputs, 0.0), leakinsess * inputs, inputs, name='leaky_relu')
+
+    def _res_subblock(inputs, n_filters, strides):
+      shortcut = inputs
 
       conv = _conv(inputs, n_filters, strides)
-
       conv = tf.layers.batch_normalization(conv, training=self.mode)
-      conv = tf.nn.relu(conv)
+      conv = _relu(conv)
+
       conv = _conv(conv, n_filters, 1)
+      conv = tf.layers.batch_normalization(conv, training=self.mode)
 
       in_channels = int(shortcut.shape[-1])
       if in_channels != n_filters:
@@ -80,29 +77,31 @@ class Resnet(object):
         shortcut = tf.pad(shortcut, 
                           [[0, 0], [0, 0], [0, 0],
                            [(n_filters-in_channels)//2, (n_filters-in_channels)//2]])
-      
+
       conv += shortcut
 
       return conv
 
-    def _res_block(inputs, n_filters, strides, activate_before_res):
-      conv = _res_subblock(inputs, n_filters, strides, activate_before_res)
+    def _res_block(inputs, n_filters, strides):
+      conv = _res_subblock(inputs, n_filters, strides)
       for i in range(1, self.num_blocks):
         conv = _res_subblock(conv, n_filters, 1)
       return conv
 
     init_conv = _conv(self.distorted_images, 16, 1)
-    block1 = _res_block(init_conv, 16, 1, True)
-    block2 = _res_block(block1, 32, 2, False)
-    block3 = _res_block(block2, 64, 2, False)
+    block1 = _res_block(init_conv, 16, 1)
+    block2 = _res_block(block1, 32, 2)
+    block3 = _res_block(block2, 64, 2)
 
     final_norm = tf.layers.batch_normalization(block3, training=self.mode)
-    final_norm = tf.nn.relu(final_norm)
+    final_norm = _relu(final_norm)
     global_avg = tf.layers.average_pooling2d(final_norm, 8, 1, padding='VALID')
-
+    
+    dense_initializer = tf.uniform_unit_scaling_initializer(factor=1.0)
     flatten = tf.layers.flatten(global_avg)
     self.logits = tf.layers.dense(flatten, self.num_classes,
-                                  kernel_regularizer=self.regularizer)
+                                  kernel_regularizer=self.regularizer,
+                                  kernel_initializer=dense_initializer)
 
   def loss(self):
     """The loss and accuracy of model."""

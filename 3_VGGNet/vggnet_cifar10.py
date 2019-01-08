@@ -1,6 +1,4 @@
-"""
-VGGNet - 90.5%
-"""
+"""VGGNet - 90.5%"""
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
