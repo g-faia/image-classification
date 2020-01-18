@@ -16,13 +16,11 @@ In this survey, we have only selected two more common image datasets:
 
 * *Cifar10* [**Cifar10**](https://www.cs.toronto.edu/~kriz/cifar.html) The CIFAR-10 dataset consists of 60000 32x32 colour images in 10 classes, with 6000 images per class. There are 50000 training images and 10000 test images. 
 
-## Experimental Results
+## Experimental Models
 
-Before the rise of deep learning, there have been a large number of algorithms for image classification tasks, which can be referred to the website [**MNIST**](http://yann.lecun.com/exdb/mnist/). In the deep learning framework i.e. Tensorflow, the simple algorithms, *Logistic Regression* and *MLP*, are implemented to solve handwriting recognition. 
+Before the rise of deep learning, there have been a large number of algorithms for image classification tasks, which can be referred to the website [**MNIST**](http://yann.lecun.com/exdb/mnist/). In the deep learning framework i.e. Tensorflow, the simple algorithms, Logistic Regression and MLP, are implemented to solve handwriting recognition. 
 
 Among such a large number of models, Alexnet (Krizhevsky et al.) is the first version of deep convolution model used in the image classification competition ILSVRC-2012. Among such a large number of models, Alexnet is the first version of deep convolution model used in the image classification competition. Based on AlexNet, VGGNet (Simonyan and Zisserman 2014) deepens the number of layers and reduces the size of the convolution kernel in the model, and greatly improves the classification accuracy of the model. ResNet (He et al. 2015) redefines the baseline in image classification, introducing a new convolutional architecture, namely direct map, which alleviates the gradient disappearance encountered when the VGGNet layer is deepened. The use of multi-channel small-scale kernel instead of the large-scale kernel can improve the generalization of the model, such that Google proposes many variant models based on this design concept (Szegedy et al. 2015).
-
-
 
 ## References
 
